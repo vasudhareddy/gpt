@@ -1,0 +1,60 @@
+import org.jasypt.encryption.pbe.StandardPBEStringEncryptor;
+import org.springframework.beans.factory.config.PropertyPlaceholderConfigurer;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.ClassPathResource;
+
+@Configuration
+public class JasyptConfig {
+
+    @Bean
+    public StandardPBEStringEncryptor stringEncryptor() {
+        StandardPBEStringEncryptor encryptor = new StandardPBEStringEncryptor();
+        
+        // Fetching the secret key from an environment variable or hardcoded for local testing
+        String secretKey = System.getenv("JASYPT_ENCRYPTOR_PASSWORD");
+        if (secretKey == null || secretKey.isEmpty()) {
+            throw new IllegalStateException("Environment variable JASYPT_ENCRYPTOR_PASSWORD is not set!");
+        }
+        encryptor.setPassword(secretKey);
+        
+        // Set algorithm to PBEWithMD5AndDES (same one you're using for encryption)
+        encryptor.setAlgorithm("PBEWithMD5AndDES");
+        return encryptor;
+    }
+
+    @Bean
+    public PropertyPlaceholderConfigurer propertyPlaceholderConfigurer(StandardPBEStringEncryptor encryptor) {
+        PropertyPlaceholderConfigurer configurer = new PropertyPlaceholderConfigurer();
+        
+        // Set the location of your properties file
+        configurer.setLocation(new ClassPathResource("application-local.properties"));
+        
+        // Decrypt property values using Jasypt's StringEncryptor
+        configurer.setProperties(loadDecryptedProperties(encryptor));
+
+        return configurer;
+    }
+
+    private Properties loadDecryptedProperties(StandardPBEStringEncryptor encryptor) {
+        Properties properties = new Properties();
+        try {
+            // Load the properties from the application-local.properties file
+            ClassPathResource resource = new ClassPathResource("application-local.properties");
+            properties.load(resource.getInputStream());
+
+            // Iterate over the properties and decrypt the encrypted ones
+            for (String key : properties.stringPropertyNames()) {
+                String value = properties.getProperty(key);
+                if (value != null && value.startsWith("ENC(")) {
+                    String decryptedValue = encryptor.decrypt(value.substring(4, value.length() - 1));
+                    properties.setProperty(key, decryptedValue);
+                }
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Error loading properties file", e);
+        }
+
+        return properties;
+    }
+}
