@@ -12,7 +12,7 @@ public class EncryptedPropertyPlaceholderConfigurer extends PropertyPlaceholderC
     public EncryptedPropertyPlaceholderConfigurer() {
         this.encryptor = new PooledPBEStringEncryptor();
         SimpleStringPBEConfig config = new SimpleStringPBEConfig();
-        config.setPassword("your-secret-key");  // Use externalized config or environment variables for security
+        config.setPassword("your-secret-key");  // Replace with secure config (e.g., env variables)
         config.setAlgorithm("PBEWithMD5AndDES");
         this.encryptor.setConfig(config);
     }
@@ -25,5 +25,31 @@ public class EncryptedPropertyPlaceholderConfigurer extends PropertyPlaceholderC
             return encryptor.decrypt(encryptedValue);
         }
         return originalValue;
+    }
+
+    @Override
+    protected Properties mergeProperties() throws Exception {
+        // Load all properties from multiple files
+        Properties mergedProperties = super.mergeProperties();
+
+        // Decrypt only the properties from application-local.properties
+        if (getLocations() != null) {
+            for (ClassPathResource resource : getLocations()) {
+                if (resource.getPath().contains("application-local.properties")) {
+                    Properties localProperties = new Properties();
+                    localProperties.load(resource.getInputStream());
+
+                    for (String key : localProperties.stringPropertyNames()) {
+                        String value = localProperties.getProperty(key);
+                        if (value != null && value.startsWith("ENC(") && value.endsWith(")")) {
+                            String decryptedValue = encryptor.decrypt(value.substring(4, value.length() - 1));
+                            mergedProperties.put(key, decryptedValue);  // Replace with decrypted value
+                        }
+                    }
+                }
+            }
+        }
+
+        return mergedProperties;
     }
 }
