@@ -3,6 +3,7 @@ import org.jasypt.encryption.pbe.config.SimpleStringPBEConfig;
 import org.springframework.beans.factory.config.PropertyPlaceholderConfigurer;
 import org.springframework.core.io.ClassPathResource;
 
+import java.io.IOException;
 import java.util.Properties;
 
 public class EncryptedPropertyPlaceholderConfigurer extends PropertyPlaceholderConfigurer {
@@ -10,42 +11,32 @@ public class EncryptedPropertyPlaceholderConfigurer extends PropertyPlaceholderC
     private PooledPBEStringEncryptor encryptor;
 
     public EncryptedPropertyPlaceholderConfigurer() {
+        // Initialize the encryptor
         this.encryptor = new PooledPBEStringEncryptor();
         SimpleStringPBEConfig config = new SimpleStringPBEConfig();
-        config.setPassword("your-secret-key");  // Replace with secure config (e.g., env variables)
+        config.setPassword("your-secret-key");  // Replace with secure password handling (e.g., environment variable)
         config.setAlgorithm("PBEWithMD5AndDES");
         this.encryptor.setConfig(config);
     }
 
     @Override
-    protected String convertPropertyValue(String originalValue) {
-        // Check if the property is encrypted with ENC(...)
-        if (originalValue.startsWith("ENC(") && originalValue.endsWith(")")) {
-            String encryptedValue = originalValue.substring(4, originalValue.length() - 1);
-            return encryptor.decrypt(encryptedValue);
-        }
-        return originalValue;
-    }
-
-    @Override
-    protected Properties mergeProperties() throws Exception {
-        // Load all properties from multiple files
+    protected Properties mergeProperties() throws IOException {
+        // Merge properties from all specified property files
         Properties mergedProperties = super.mergeProperties();
 
-        // Decrypt only the properties from application-local.properties
-        if (getLocations() != null) {
-            for (ClassPathResource resource : getLocations()) {
-                if (resource.getPath().contains("application-local.properties")) {
-                    Properties localProperties = new Properties();
-                    localProperties.load(resource.getInputStream());
+        // Load and decrypt properties from application-local.properties
+        ClassPathResource localPropertiesResource = new ClassPathResource("application-local.properties");
+        if (localPropertiesResource.exists()) {
+            Properties localProperties = new Properties();
+            localProperties.load(localPropertiesResource.getInputStream());
 
-                    for (String key : localProperties.stringPropertyNames()) {
-                        String value = localProperties.getProperty(key);
-                        if (value != null && value.startsWith("ENC(") && value.endsWith(")")) {
-                            String decryptedValue = encryptor.decrypt(value.substring(4, value.length() - 1));
-                            mergedProperties.put(key, decryptedValue);  // Replace with decrypted value
-                        }
-                    }
+            // Decrypt encrypted properties in application-local.properties
+            for (String key : localProperties.stringPropertyNames()) {
+                String value = localProperties.getProperty(key);
+                if (value != null && value.startsWith("ENC(") && value.endsWith(")")) {
+                    String encryptedValue = value.substring(4, value.length() - 1);
+                    String decryptedValue = encryptor.decrypt(encryptedValue);
+                    mergedProperties.put(key, decryptedValue);  // Replace with decrypted value
                 }
             }
         }
