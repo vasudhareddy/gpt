@@ -1,0 +1,106 @@
+import org.jasypt.encryption.pbe.PooledPBEStringEncryptor;
+import org.junit.Before;
+import org.junit.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.springframework.core.io.ClassPathResource;
+
+import java.io.IOException;
+import java.util.Properties;
+
+import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
+
+public class EncryptedPropertyPlaceholderConfigurerTest {
+
+    @Mock
+    private PooledPBEStringEncryptor encryptor;
+
+    @InjectMocks
+    private EncryptedPropertyPlaceholderConfigurer configurer;
+
+    @Before
+    public void setUp() {
+        MockitoAnnotations.initMocks(this);
+    }
+
+    @Test
+    public void testMergePropertiesWithDecryptedValues() throws IOException {
+        // Mock the encrypted value and decrypted result
+        String encryptedValue = "ENC(encryptedValue)";
+        String decryptedValue = "decryptedValue";
+
+        // Create a mock resource for application-local.properties
+        ClassPathResource mockResource = mock(ClassPathResource.class);
+        when(mockResource.exists()).thenReturn(true);
+
+        // Mock the behavior of decryptor
+        when(encryptor.decrypt("encryptedValue")).thenReturn(decryptedValue);
+
+        // Set up the properties to be loaded
+        Properties mockProperties = new Properties();
+        mockProperties.put("db.password", encryptedValue);
+        when(mockResource.getInputStream()).thenReturn(
+            new java.io.ByteArrayInputStream(
+                "db.password=ENC(encryptedValue)\n".getBytes()
+            )
+        );
+
+        // Set up the configuration to use the mock resource
+        configurer = spy(new EncryptedPropertyPlaceholderConfigurer());
+        doReturn(mockResource).when(configurer).getClassPathResource();
+
+        // Run the mergeProperties method
+        Properties mergedProps = configurer.mergeProperties();
+
+        // Verify the decryptor was called and the property was decrypted
+        verify(encryptor).decrypt("encryptedValue");
+
+        // Verify the decrypted value is in the properties
+        assertEquals("decryptedValue", mergedProps.getProperty("db.password"));
+    }
+
+    @Test
+    public void testMergePropertiesWithNonEncryptedValues() throws IOException {
+        // Mock the properties without encryption
+        ClassPathResource mockResource = mock(ClassPathResource.class);
+        when(mockResource.exists()).thenReturn(true);
+
+        // Set up properties with non-encrypted values
+        Properties mockProperties = new Properties();
+        mockProperties.put("db.username", "myUser");
+        when(mockResource.getInputStream()).thenReturn(
+            new java.io.ByteArrayInputStream(
+                "db.username=myUser\n".getBytes()
+            )
+        );
+
+        // Set up the configuration to use the mock resource
+        configurer = spy(new EncryptedPropertyPlaceholderConfigurer());
+        doReturn(mockResource).when(configurer).getClassPathResource();
+
+        // Run the mergeProperties method
+        Properties mergedProps = configurer.mergeProperties();
+
+        // Verify that non-encrypted properties are merged without modification
+        assertEquals("myUser", mergedProps.getProperty("db.username"));
+    }
+
+    @Test
+    public void testMergePropertiesFileDoesNotExist() throws IOException {
+        // Mock the resource that doesn't exist
+        ClassPathResource mockResource = mock(ClassPathResource.class);
+        when(mockResource.exists()).thenReturn(false);
+
+        // Set up the configuration to use the mock resource
+        configurer = spy(new EncryptedPropertyPlaceholderConfigurer());
+        doReturn(mockResource).when(configurer).getClassPathResource();
+
+        // Run the mergeProperties method
+        Properties mergedProps = configurer.mergeProperties();
+
+        // Verify that no properties are returned since the file doesn't exist
+        assertTrue(mergedProps.isEmpty());
+    }
+}
