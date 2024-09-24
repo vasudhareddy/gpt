@@ -2,11 +2,12 @@ import org.jasypt.encryption.pbe.PooledPBEStringEncryptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.ConfigurableEnvironment;
-import org.springframework.core.env.PropertySource;
-import org.springframework.core.io.support.ResourcePropertySource;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
 
 import javax.annotation.PostConstruct;
 import java.io.IOException;
+import java.util.Properties;
 
 @Configuration
 public class EncryptedPropertyLoader {
@@ -19,17 +20,23 @@ public class EncryptedPropertyLoader {
 
     @PostConstruct
     public void loadEncryptedProperties() throws IOException {
-        // Load properties from application-local.properties
-        PropertySource<?> propertySource = new ResourcePropertySource("classpath:application-local.properties");
-        environment.getPropertySources().addLast(propertySource);
+        Resource resource = new ClassPathResource("application-local.properties");
+        Properties properties = new Properties();
+        properties.load(resource.getInputStream());
 
-        for (String key : propertySource.getPropertyNames()) {
-            String value = environment.getProperty(key);
+        Properties decryptedProperties = new Properties();
+        for (String key : properties.stringPropertyNames()) {
+            String value = properties.getProperty(key);
             if (value != null && value.startsWith("ENC(") && value.endsWith(")")) {
                 String encryptedValue = value.substring(4, value.length() - 1);
                 String decryptedValue = encryptor.decrypt(encryptedValue);
-                environment.getSystemProperties().put(key, decryptedValue);
+                decryptedProperties.put(key, decryptedValue);
+            } else {
+                decryptedProperties.put(key, value);
             }
         }
+
+        // Add decrypted properties to the environment
+        environment.getPropertySources().addLast(new org.springframework.core.env.PropertiesPropertySource("decryptedProps", decryptedProperties));
     }
 }
