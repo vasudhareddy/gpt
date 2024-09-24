@@ -1,0 +1,29 @@
+import org.jasypt.encryption.pbe.PooledPBEStringEncryptor;
+import org.jasypt.encryption.pbe.config.SimpleStringPBEConfig;
+import org.springframework.beans.factory.config.PropertyPlaceholderConfigurer;
+import org.springframework.core.io.ClassPathResource;
+
+import java.util.Properties;
+
+public class EncryptedPropertyPlaceholderConfigurer extends PropertyPlaceholderConfigurer {
+
+    private PooledPBEStringEncryptor encryptor;
+
+    public EncryptedPropertyPlaceholderConfigurer() {
+        this.encryptor = new PooledPBEStringEncryptor();
+        SimpleStringPBEConfig config = new SimpleStringPBEConfig();
+        config.setPassword("your-secret-key");  // Use externalized config or environment variables for security
+        config.setAlgorithm("PBEWithMD5AndDES");
+        this.encryptor.setConfig(config);
+    }
+
+    @Override
+    protected String convertPropertyValue(String originalValue) {
+        // Check if the property is encrypted with ENC(...)
+        if (originalValue.startsWith("ENC(") && originalValue.endsWith(")")) {
+            String encryptedValue = originalValue.substring(4, originalValue.length() - 1);
+            return encryptor.decrypt(encryptedValue);
+        }
+        return originalValue;
+    }
+}
