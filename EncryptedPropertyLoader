@@ -1,0 +1,35 @@
+import org.jasypt.encryption.pbe.PooledPBEStringEncryptor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.ConfigurableEnvironment;
+import org.springframework.core.env.PropertySource;
+import org.springframework.core.io.support.ResourcePropertySource;
+
+import javax.annotation.PostConstruct;
+import java.io.IOException;
+
+@Configuration
+public class EncryptedPropertyLoader {
+
+    @Autowired
+    private ConfigurableEnvironment environment;
+
+    @Autowired
+    private PooledPBEStringEncryptor encryptor;
+
+    @PostConstruct
+    public void loadEncryptedProperties() throws IOException {
+        // Load properties from application-local.properties
+        PropertySource<?> propertySource = new ResourcePropertySource("classpath:application-local.properties");
+        environment.getPropertySources().addLast(propertySource);
+
+        for (String key : propertySource.getPropertyNames()) {
+            String value = environment.getProperty(key);
+            if (value != null && value.startsWith("ENC(") && value.endsWith(")")) {
+                String encryptedValue = value.substring(4, value.length() - 1);
+                String decryptedValue = encryptor.decrypt(encryptedValue);
+                environment.getSystemProperties().put(key, decryptedValue);
+            }
+        }
+    }
+}
