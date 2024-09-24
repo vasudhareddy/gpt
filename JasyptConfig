@@ -1,0 +1,27 @@
+import org.jasypt.encryption.pbe.PooledPBEStringEncryptor;
+import org.jasypt.encryption.pbe.config.SimpleStringPBEConfig;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class JasyptConfig {
+
+    @Bean
+    public PooledPBEStringEncryptor stringEncryptor() {
+        PooledPBEStringEncryptor encryptor = new PooledPBEStringEncryptor();
+        encryptor.setConfig(pbeConfig());
+        return encryptor;
+    }
+
+    @Bean
+    public SimpleStringPBEConfig pbeConfig() {
+        SimpleStringPBEConfig config = new SimpleStringPBEConfig();
+        config.setPassword("your-secret-key"); // Encryption key
+        config.setAlgorithm("PBEWithMD5AndDES"); // Encryption algorithm
+        config.setKeyObtentionIterations("1000");
+        config.setPoolSize("1"); // Pool size for multi-threading
+        config.setSaltGeneratorClassName("org.jasypt.salt.RandomSaltGenerator");
+        config.setStringOutputType("base64"); // Output type of the encrypted text
+        return config;
+    }
+}
