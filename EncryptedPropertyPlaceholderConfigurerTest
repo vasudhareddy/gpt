@@ -19,12 +19,17 @@ public class EncryptedPropertyPlaceholderConfigurerTest {
     @Mock
     private PooledPBEStringEncryptor encryptor;
 
+    @Mock
+    private ClassPathResource localPropertiesResource;
+
     @InjectMocks
     private EncryptedPropertyPlaceholderConfigurer configurer;
 
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
+        // Initialize the configurer with the mocked resource
+        configurer = new EncryptedPropertyPlaceholderConfigurer(localPropertiesResource);
     }
 
     @Test
@@ -37,16 +42,11 @@ public class EncryptedPropertyPlaceholderConfigurerTest {
         when(encryptor.decrypt("encryptedValue")).thenReturn(decryptedValue);
 
         // Mock the ClassPathResource and the InputStream for application-local.properties
-        ClassPathResource mockResource = mock(ClassPathResource.class);
         InputStream mockInputStream = new ByteArrayInputStream("db.password=ENC(encryptedValue)".getBytes());
 
         // Mock that the file exists and return the InputStream
-        when(mockResource.exists()).thenReturn(true);
-        when(mockResource.getInputStream()).thenReturn(mockInputStream);
-
-        // Spy on the configurer and mock the resource to simulate loading the properties file
-        configurer = spy(new EncryptedPropertyPlaceholderConfigurer());
-        doReturn(mockResource).when(configurer).getLocalPropertiesResource(); // This directly returns the mocked resource
+        when(localPropertiesResource.exists()).thenReturn(true);
+        when(localPropertiesResource.getInputStream()).thenReturn(mockInputStream);
 
         // Run the mergeProperties method
         Properties mergedProps = configurer.mergeProperties();
@@ -60,17 +60,12 @@ public class EncryptedPropertyPlaceholderConfigurerTest {
 
     @Test
     public void testMergePropertiesWithNonEncryptedValues() throws IOException {
-        // Mock the ClassPathResource and the InputStream for non-encrypted properties
-        ClassPathResource mockResource = mock(ClassPathResource.class);
+        // Mock the InputStream for non-encrypted properties
         InputStream mockInputStream = new ByteArrayInputStream("db.username=myUser".getBytes());
 
         // Mock that the file exists and return the InputStream
-        when(mockResource.exists()).thenReturn(true);
-        when(mockResource.getInputStream()).thenReturn(mockInputStream);
-
-        // Spy on the configurer and mock the resource
-        configurer = spy(new EncryptedPropertyPlaceholderConfigurer());
-        doReturn(mockResource).when(configurer).getLocalPropertiesResource();
+        when(localPropertiesResource.exists()).thenReturn(true);
+        when(localPropertiesResource.getInputStream()).thenReturn(mockInputStream);
 
         // Run the mergeProperties method
         Properties mergedProps = configurer.mergeProperties();
@@ -82,17 +77,12 @@ public class EncryptedPropertyPlaceholderConfigurerTest {
     @Test
     public void testMergePropertiesFileDoesNotExist() throws IOException {
         // Mock the ClassPathResource to simulate the file not existing
-        ClassPathResource mockResource = mock(ClassPathResource.class);
-        when(mockResource.exists()).thenReturn(false);
-
-        // Spy on the configurer and mock the resource
-        configurer = spy(new EncryptedPropertyPlaceholderConfigurer());
-        doReturn(mockResource).when(configurer).getLocalPropertiesResource();
+        when(localPropertiesResource.exists()).thenReturn(false);
 
         // Run the mergeProperties method
         Properties mergedProps = configurer.mergeProperties();
 
         // Verify that no properties are returned when the file does not exist
-        assertTrue(mergedProps.isEmpty());
+        assertEquals(0, mergedProps.size());
     }
 }
