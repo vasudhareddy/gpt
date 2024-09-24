@@ -1,30 +1,30 @@
 import org.jasypt.encryption.pbe.PooledPBEStringEncryptor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.env.ConfigurableEnvironment;
+import org.springframework.context.support.PropertySourcesPlaceholderConfigurer;
 import org.springframework.core.io.ClassPathResource;
-import org.springframework.core.io.Resource;
 
-import javax.annotation.PostConstruct;
 import java.io.IOException;
 import java.util.Properties;
 
 @Configuration
-public class EncryptedPropertyLoader {
-
-    @Autowired
-    private ConfigurableEnvironment environment;
+public class EncryptedPropertyConfig {
 
     @Autowired
     private PooledPBEStringEncryptor encryptor;
 
-    @PostConstruct
-    public void loadEncryptedProperties() throws IOException {
-        Resource resource = new ClassPathResource("application-local.properties");
+    @Bean
+    public static PropertySourcesPlaceholderConfigurer propertyConfigurer(PooledPBEStringEncryptor encryptor) throws IOException {
+        PropertySourcesPlaceholderConfigurer configurer = new PropertySourcesPlaceholderConfigurer();
         Properties properties = new Properties();
+
+        // Load properties from application-local.properties
+        ClassPathResource resource = new ClassPathResource("application-local.properties");
         properties.load(resource.getInputStream());
 
         Properties decryptedProperties = new Properties();
+
         for (String key : properties.stringPropertyNames()) {
             String value = properties.getProperty(key);
             if (value != null && value.startsWith("ENC(") && value.endsWith(")")) {
@@ -36,7 +36,8 @@ public class EncryptedPropertyLoader {
             }
         }
 
-        // Add decrypted properties to the environment
-        environment.getPropertySources().addLast(new org.springframework.core.env.PropertiesPropertySource("decryptedProps", decryptedProperties));
+        // Apply decrypted properties
+        configurer.setProperties(decryptedProperties);
+        return configurer;
     }
 }
