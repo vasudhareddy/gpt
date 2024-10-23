@@ -1,0 +1,28 @@
+public String getFeeCodeDescription(String feeCode, String clientNo) {
+    Validate.notNull(feeCode);
+
+    // Remove the space from the feeCode for consistency
+    String feeCodeNoSpace = feeCode.replaceAll(ServiceConstants.SPACE_REGULAR_EXPRESSION, ServiceConstants.EMPTY_STRING);
+    String clientNoNoSpace = clientNo.replaceAll(ServiceConstants.SPACE_REGULAR_EXPRESSION, ServiceConstants.EMPTY_STRING);
+
+    // Generate the cache key using the same pattern as before
+    String cacheKey = generateCacheKey(feeCodeNoSpace, clientNoNoSpace);
+
+    // Try to get the FeeCode description from Redis cache
+    String feeCodeDesc = (String) redisTemplate.opsForValue().get(cacheKey);
+
+    if (feeCodeDesc != null) {
+        // If found in cache, return it immediately
+        return feeCodeDesc;
+    } else {
+        // If not found in cache, log a warning and return null (or you could handle it differently)
+        LOGGER.warn("FeeCode description not found in cache for feeCode: " + feeCode + " and clientNo: " + clientNo);
+        return null;
+    }
+}
+
+// Helper method to generate cache key
+private String generateCacheKey(String feeCode, String clientNo) {
+    // Cache name prefix with feeCode and clientNo concatenated
+    return "myCache::getFeeCodeDescription-" + feeCode + "-" + clientNo;
+}
