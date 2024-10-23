@@ -1,0 +1,102 @@
+@Repository
+public class TouchdownDAO {
+
+    private final RedisTemplate<String, Object> redisTemplate;
+    private final static String CACHE_PREFIX = "touchdownLookupCache::getFeeCodeDescription";
+
+    private final SqlSessionFactory touchdownSqlSessionFactory;
+
+    // Constructor injection for RedisTemplate and SqlSessionFactory
+    public TouchdownDAO(RedisTemplate<String, Object> redisTemplate, SqlSessionFactory touchdownSqlSessionFactory) {
+        this.redisTemplate = redisTemplate;
+        this.touchdownSqlSessionFactory = touchdownSqlSessionFactory;
+    }
+
+    // Fetch the list of FeeCodes from the DB once and cache each entry
+    public void cacheAllFeeCodeDescriptions() {
+        try {
+            long startTime = System.currentTimeMillis();
+
+            // Fetch all fee codes from the DB
+            List<FeeCode> feeCodeList = getFeeCodeDescriptionFromDB();
+            String feeCode;
+            String clientNo;
+            String cacheKey;
+
+            // Iterate over the list and cache each entry
+            for (FeeCode fc : feeCodeList) {
+                if (fc.getFeeCode() != null) {
+                    feeCode = fc.getFeeCode().replaceAll(ServiceConstants.SPACE_REGULAR_EXPRESSION, ServiceConstants.EMPTY_STRING);
+                    clientNo = fc.getClientNo().replaceAll(ServiceConstants.SPACE_REGULAR_EXPRESSION, ServiceConstants.EMPTY_STRING);
+
+                    // Generate cache key for each entry
+                    cacheKey = generateCacheKey(feeCode, clientNo);
+
+                    // Cache the FeeCode description
+                    redisTemplate.opsForValue().set(cacheKey, fc.getFeeCodeDesc());
+                }
+            }
+
+            if (LOGGER.isInfoEnabled()) {
+                LOGGER.info("All fee codes cached successfully. Time taken: " + (System.currentTimeMillis() - startTime) + " ms");
+            }
+        } catch (Exception e) {
+            LOGGER.error("Error while caching fee codes", e);
+        }
+    }
+
+    // Helper method to generate cache keys
+    private String generateCacheKey(String feeCode, String clientNo) {
+        return CACHE_PREFIX + "-" + feeCode + "-" + clientNo;
+    }
+
+    // Evict all fee code descriptions from cache that start with a specific pattern
+    public void evictAllFeeCodeCache() {
+        String pattern = CACHE_PREFIX + "*"; // Pattern to match all relevant keys
+
+        // Find and delete all keys matching the pattern
+        Set<String> keys = redisTemplate.keys(pattern);
+        if (keys != null && !keys.isEmpty()) {
+            redisTemplate.delete(keys);
+            LOGGER.info("Evicted all cache entries for fee codes.");
+        } else {
+            LOGGER.info("No cache entries found for fee codes.");
+        }
+    }
+
+    // Fetch FeeCode description from the cache
+    public String getFeeCodeDescriptionFromCache(String feeCode, String clientNo) {
+        String cacheKey = generateCacheKey(feeCode, clientNo);
+        return (String) redisTemplate.opsForValue().get(cacheKey);
+    }
+
+    // This is the original DB call to get FeeCodes from the database
+    public List<FeeCode> getFeeCodeDescriptionFromDB() {
+        List<FeeCode> feeCodeList = new ArrayList<>();
+        List<FeeCode> feeCodeAll = null;
+        long startTime = System.currentTimeMillis();
+
+        try (SqlSession session = touchdownSqlSessionFactory.openSession()) {
+            FeeCodeMapper mapper = session.getMapper(FeeCodeMapper.class);
+            feeCodeAll = mapper.getFeeCodeAll();
+        }
+
+        if (LOGGER.isInfoEnabled()) {
+            StringBuilder logStmt = new StringBuilder();
+            logStmt.append(ServiceConstants.OPEN_BRACKET)
+                   .append(ServiceConstants.TOTAL_TIME_SPENT)
+                   .append(TouchDownConstants.GET_FEE_CODE_ALL)
+                   .append(System.currentTimeMillis() - startTime)
+                   .append(ServiceConstants.CLOSE_BRACKET);
+            LOGGER.info(logStmt.toString());
+        }
+
+        if (!CollectionUtils.isEmpty(feeCodeAll)) {
+            for (FeeCode feeCode : feeCodeAll) {
+                feeCodeList.addAll(feeCode.getFeeCode());
+            }
+        }
+
+        return feeCodeList;
+    }
+}
