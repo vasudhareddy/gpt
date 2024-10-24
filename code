@@ -1,61 +1,82 @@
-public void populateTransactionCodeDescription() {
+public String getFeeCodeDescription(String feeCode, String clientNo) {
+    Validate.notNull(feeCode, "Fee code must not be null");
+    long startTime = System.currentTimeMillis();
+    
+    try (SqlSession session = touchdownSqlSessionFactory.openSession()) {
+        List<FeeCode> feeCodes = session.getMapper(FeeCodeMapper.class)
+                .getFeeCode(feeCode.replaceAll(ServiceConstants.SPACE_REGULAR_EXPRESSION, ServiceConstants.EMPTY_STRING), ".*");
+        
+        String feeCodeDesc = (feeCodes != null && !feeCodes.isEmpty()) 
+                ? feeCodes.get(0).getFeeCodeDesc() 
+                : logNoRecordsWarn(feeCode, clientNo);
+
+        logExecutionTime(startTime);
+        return feeCodeDesc;
+    }
+}
+
+private void logExecutionTime(long startTime) {
     if (LOGGER.isInfoEnabled()) {
-        LOGGER.info(ServiceConstants.POPULATE + TransactionCd.class);
-    }
-    try {
-        long startTime = System.currentTimeMillis();
-
-        // Step 1: Fetch all transaction codes from the database
-        List<TransactionCd> transactionCodeList = touchdownDAO.getTransactionCodeDescriptions();
-
-        // Step 2: Evict all related cache entries
-        evictAllTransactionCodeCache();
-
-        // Step 3: Cache all the fetched data
-        cacheAllTransactionCodeDescriptions(transactionCodeList);
-
-        // Log the total time taken
-        if (LOGGER.isInfoEnabled()) {
-            LOGGER.info("Time taken to populate transaction codes: " + (System.currentTimeMillis() - startTime) + " ms");
-        }
-
-    } catch (Exception ex) {
-        LOGGER.error(ServiceConstants.ERROR_MESSAGE, ex);
+        LOGGER.info("{}{}{}", ServiceConstants.TOTAL_TIME_SPENT, System.currentTimeMillis() - startTime, ServiceConstants.CLOSE_BRACKET);
     }
 }
 
-private void evictAllTransactionCodeCache() {
-    try {
-        String pattern = "getTransactionCodeDescription*"; // Cache key pattern to match all related entries
-        Set<String> keys = redisTemplate.keys(pattern);
+private String logNoRecordsWarn(String feeCode, String clientNo) {
+    LOGGER.warn("{}{}{}", NO_RECORDS_MSG, feeCode, CLIENT_NO_MSG, clientNo);
+    return null;
+}
 
-        if (keys != null && !keys.isEmpty()) {
-            redisTemplate.delete(keys);
-            LOGGER.info("Evicted all cache entries for transaction codes.");
-        } else {
-            LOGGER.info("No cache entries found for transaction codes.");
+public BatchCd getBatchCodeDescription(String batchCode) {
+    Validate.notNull(batchCode, "Batch code must not be null");
+    long startTime = System.currentTimeMillis();
+    
+    try (SqlSession session = touchdownSqlSessionFactory.openSession()) {
+        BatchCodeMapper mapper = session.getMapper(BatchCodeMapper.class);
+        BatchCd batchCodeValue = mapper.getBatchCode(batchCode);
+        
+        if (batchCodeValue == null) {
+            return logNoRecordsWarn("Batch Code", batchCode, null);  // ClientNo is not available here
         }
-    } catch (Exception ex) {
-        LOGGER.error("Error while evicting transaction code cache", ex);
+
+        logExecutionTime(startTime, TouchDownConstants.GET_BATCH_CODE);
+        return batchCodeValue;
     }
 }
 
-private void cacheAllTransactionCodeDescriptions(List<TransactionCd> transactionCodeList) {
-    try {
-        for (TransactionCd tranCode : transactionCodeList) {
-            Integer transactionCode = tranCode.getTransactionCode();
 
-            // Generate cache key
-            String cacheKey = "getTransactionCodeDescription" + ServiceConstants.WORD_SEPARATE + transactionCode;
-
-            // Cache the transaction code description
-            redisTemplate.opsForValue().set(cacheKey, tranCode);
-
-            if (LOGGER.isInfoEnabled()) {
-                LOGGER.info("Cached transaction code: " + transactionCode);
-            }
+public ApplControl getApplControlById(String applControlID) {
+    Validate.notNull(applControlID, "AppControl ID must not be null");
+    long startTime = System.currentTimeMillis();
+    
+    try (SqlSession session = touchdownSqlSessionFactory.openSession()) {
+        ApplicationControlMapper mapper = session.getMapper(ApplicationControlMapper.class);
+        ApplControl applControl = mapper
+                .getApplControl(applControlID.replaceAll(ServiceConstants.SPACE_REGULAR_EXPRESSION, ServiceConstants.EMPTY_STRING));
+        
+        if (applControl == null) {
+            return logNoRecordsWarn("App Control", applControlID, null);  // ClientNo is not available here
         }
-    } catch (Exception ex) {
-        LOGGER.error("Error while caching transaction code descriptions", ex);
+
+        logExecutionTime(startTime, TouchDownConstants.GET_APPL_CONTROL);
+        return applControl;
+    }
+}
+public TransactionCd getTransactionCodeDescription(Integer transactionCode) {
+    Validate.notNull(transactionCode, "Transaction code must not be null");
+    long startTime = System.currentTimeMillis();
+    
+    try (SqlSession session = touchdownSqlSessionFactory.openSession()) {
+        TransactionCodeMapper mapper = session.getMapper(TransactionCodeMapper.class);
+        TransactionCd transactionCodeValue = mapper.getTransactionCode(transactionCode);
+        
+        logExecutionTime(startTime, TouchDownConstants.GET_TRAN_CODE);
+        return transactionCodeValue;
+    }
+}
+
+private void logExecutionTime(long startTime, String operation) {
+    if (LOGGER.isInfoEnabled()) {
+        LOGGER.info("{}{}{}", ServiceConstants.OPEN_BRACKET, operation,
+                (System.currentTimeMillis() - startTime) + ServiceConstants.CLOSE_BRACKET);
     }
 }
