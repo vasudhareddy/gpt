@@ -1,0 +1,122 @@
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.mockito.Mockito;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.util.StringUtils;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+class CacheServiceTest {
+
+    @Mock
+    private RedisTemplate<String, Object> redisTemplate;
+
+    @Mock
+    private ValueOperations<String, Object> valueOperations;
+
+    @Mock
+    private TouchDownDAO touchDownDAO;
+
+    @InjectMocks
+    private CacheService cacheService;
+
+    @BeforeEach
+    void setUp() {
+        MockitoAnnotations.openMocks(this);
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+    }
+
+    @Test
+    void testGetFeeCodeDescription_CacheHit() {
+        // Arrange
+        String feeCode = "F123";
+        String clientNo = "C456";
+        String cacheKey = "feePrefix_F123_C456";
+        String feeCodeDesc = "Fee description from cache";
+
+        when(valueOperations.get(cacheKey)).thenReturn(feeCodeDesc);
+
+        // Act
+        String result = cacheService.getFeeCodeDescription(feeCode, clientNo);
+
+        // Assert
+        assertEquals(feeCodeDesc, result);
+        verify(valueOperations).get(cacheKey);
+        verifyNoInteractions(touchDownDAO); // No DB call when cache hit
+    }
+
+    @Test
+    void testGetFeeCodeDescription_CacheMiss() {
+        // Arrange
+        String feeCode = "F123";
+        String clientNo = "C456";
+        String cacheKey = "feePrefix_F123_C456";
+        String feeCodeDesc = "Fee description from DB";
+
+        when(valueOperations.get(cacheKey)).thenReturn(null);
+        when(touchDownDAO.getFeeCodeDescription(feeCode, clientNo)).thenReturn(feeCodeDesc);
+
+        // Act
+        String result = cacheService.getFeeCodeDescription(feeCode, clientNo);
+
+        // Assert
+        assertEquals(feeCodeDesc, result);
+        verify(valueOperations).get(cacheKey);
+        verify(touchDownDAO).getFeeCodeDescription(feeCode, clientNo); // Ensure DB call
+        verify(valueOperations).set(cacheKey, feeCodeDesc); // Ensure cache is updated
+    }
+
+    @Test
+    void testCacheAllFeeCodeDescriptions() {
+        // Arrange
+        FeeCode feeCode1 = new FeeCode("F123", "C456", "Description 1");
+        FeeCode feeCode2 = new FeeCode("F789", "C012", "Description 2");
+        List<FeeCode> feeCodeList = Arrays.asList(feeCode1, feeCode2);
+
+        // Act
+        cacheService.cacheAllFeeCodeDescriptions(feeCodeList);
+
+        // Assert
+        verify(valueOperations, times(1)).set("feePrefix_F123_C456", "Description 1");
+        verify(valueOperations, times(1)).set("feePrefix_F789_C012", "Description 2");
+    }
+
+    @Test
+    void testEvictAll() {
+        // Arrange
+        String prefix = "feePrefix";
+        Set<String> keys = Set.of("feePrefix_F123_C456", "feePrefix_F789_C012");
+
+        when(redisTemplate.keys(prefix + "*")).thenReturn(keys);
+
+        // Act
+        cacheService.evictAll(prefix);
+
+        // Assert
+        verify(redisTemplate).delete(keys);
+    }
+
+    @Test
+    void testEvictAll_NoKeysFound() {
+        // Arrange
+        String prefix = "feePrefix";
+
+        when(redisTemplate.keys(prefix + "*")).thenReturn(Collections.emptySet());
+
+        // Act
+        cacheService.evictAll(prefix);
+
+        // Assert
+        verify(redisTemplate, never()).delete(anySet());
+    }
+}
