@@ -1,0 +1,50 @@
+import ch.qos.logback.classic.Appender;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import org.junit.Before;
+import org.junit.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.slf4j.LoggerFactory;
+
+import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.when;
+
+public class DBCacheMaintenanceImplTest {
+
+    @InjectMocks
+    private DBCacheMaintenanceImpl dbCacheMaintenance;
+
+    @Mock
+    private TouchdownDAO touchdownDAO;
+
+    private ListAppender<ILoggingEvent> logAppender;
+
+    @Before
+    public void setUp() {
+        MockitoAnnotations.openMocks(this);
+
+        // Set up the ListAppender to capture logs
+        Logger logger = (Logger) LoggerFactory.getLogger(DBCacheMaintenanceImpl.class);
+        logAppender = new ListAppender<>();
+        logAppender.start();
+        logger.addAppender(logAppender);
+    }
+
+    @Test
+    public void testPopulateFeeCodeDescription_Exception() {
+        // Mock the DAO method to throw a RuntimeException
+        when(touchdownDAO.getFeeCodeDescription()).thenThrow(new RuntimeException("DB error"));
+
+        // Call the method under test
+        dbCacheMaintenance.populateFeeCodeDescription();
+
+        // Verify that the error message is logged
+        assertTrue(logAppender.list.stream()
+            .anyMatch(event -> event.getFormattedMessage().contains("populate lookup data error")
+                && event.getThrowableProxy() != null
+                && event.getThrowableProxy().getClassName().equals(RuntimeException.class.getName())));
+    }
+}
