@@ -1,0 +1,12 @@
+- After deploying the changes, I observed jobs running more than once:
+  - One instance at 1 AM.
+  - Another instance at 10:17 AM.
+- This issue is due to a fixed delay in the scheduled task.
+  - To address this, I removed the task to ensure the job runs only once.
+- Additional observation:
+  - The cron job is executing on all PCF instances.
+  - I added code to ensure the job runs only once on a single instance.
+- Intermittent reconnecting issues are observed occasionally:
+  - Likely due to server load or network instability.
+- With 10-15 services loading data into Redis simultaneously, there may be an overload.
+  - Suggestion: Stagger jobs to reduce load, e.g., some at 1 AM, others at 2 AM, etc.
