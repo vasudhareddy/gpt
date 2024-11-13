@@ -1,0 +1,19 @@
+import javax.annotation.PostConstruct;
+
+public class MyService {
+
+    private static volatile boolean isInitialized = false;
+
+    @PostConstruct
+    public void init() {
+        if (!isInitialized) {
+            synchronized (MyService.class) {
+                if (!isInitialized) {
+                    // Run initialization logic here
+                    System.out.println("Running @PostConstruct initialization logic.");
+                    isInitialized = true;
+                }
+            }
+        }
+    }
+}
