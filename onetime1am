@@ -1,0 +1,64 @@
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.Scheduled;
+
+import java.util.concurrent.TimeUnit;
+
+@Configuration
+@EnableScheduling
+public class OneTimeAndDailyJob {
+
+    @Autowired
+    private StringRedisTemplate redisTemplate;
+
+    private static final String STARTUP_LOCK_KEY = "startupJobLock";
+    private static final String DAILY_LOCK_KEY = "dailyJobLock";
+
+    // In-memory flag to track if the startup job has already run in this instance
+    private static volatile boolean isStartupJobExecuted = false;
+
+    /**
+     * This method runs once after the application starts in one of the instances.
+     */
+    @Scheduled(initialDelay = 300000, fixedDelay = Long.MAX_VALUE) // 5 minutes after startup
+    public void runOnceAfterStartup() {
+        if (!isStartupJobExecuted) {
+            // Try to acquire the lock with no expiration (only reset on application restart)
+            Boolean acquired = redisTemplate.opsForValue().setIfAbsent(STARTUP_LOCK_KEY, "locked");
+
+            if (Boolean.TRUE.equals(acquired)) {
+                try {
+                    isStartupJobExecuted = true; // Set the in-memory flag
+                    // Run your initialization logic here
+                    System.out.println("Running one-time initialization logic after startup.");
+                } catch (Exception e) {
+                    System.err.println("Error during startup job execution: " + e.getMessage());
+                }
+            } else {
+                System.out.println("Startup job already executed by another instance.");
+            }
+        }
+    }
+
+    /**
+     * This method runs once daily at 1 AM in one of the instances.
+     */
+    @Scheduled(cron = "0 0 1 * * ?")
+    public void runOnceDailyJob() {
+        // Try to acquire the daily lock with a TTL of 24 hours (to reset each day)
+        Boolean acquired = redisTemplate.opsForValue().setIfAbsent(DAILY_LOCK_KEY, "locked", 1, TimeUnit.DAYS);
+
+        if (Boolean.TRUE.equals(acquired)) {
+            try {
+                // Run your daily job logic here
+                System.out.println("Running one-time daily job at 1 AM.");
+            } catch (Exception e) {
+                System.err.println("Error during daily job execution: " + e.getMessage());
+            }
+        } else {
+            System.out.println("Daily job already executed by another instance.");
+        }
+    }
+}
