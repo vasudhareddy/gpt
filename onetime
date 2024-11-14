@@ -1,0 +1,38 @@
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.Scheduled;
+
+import java.util.concurrent.TimeUnit;
+
+@Configuration
+@EnableScheduling
+public class OneTimeJob {
+
+    @Autowired
+    private StringRedisTemplate redisTemplate;
+
+    private static final String LOCK_KEY = "oneTimeJobLock";
+
+    @Scheduled(fixedDelay = 300000, initialDelay = 300000) // Runs 5 minutes after startup
+    public void runOneTimeJob() {
+        // Try to acquire the lock with a timeout of 10 minutes
+        Boolean acquired = redisTemplate.opsForValue().setIfAbsent(LOCK_KEY, "locked", 10, TimeUnit.MINUTES);
+
+        if (Boolean.TRUE.equals(acquired)) {
+            try {
+                // Execute your job logic here
+                System.out.println("Running the one-time job in one instance only.");
+                // Perform necessary initialization or job tasks here
+
+            } finally {
+                // Optionally release the lock if you want it to run again after expiration
+                // Uncomment the line below if you want the job to be executed only once ever
+                // redisTemplate.delete(LOCK_KEY);
+            }
+        } else {
+            System.out.println("Job already executed by another instance.");
+        }
+    }
+}
