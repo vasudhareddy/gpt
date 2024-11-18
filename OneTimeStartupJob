@@ -1,0 +1,64 @@
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.Scheduled;
+
+import java.util.concurrent.TimeUnit;
+
+@Configuration
+@EnableScheduling
+public class OneTimeStartupJob {
+
+    @Autowired
+    private StringRedisTemplate redisTemplate;
+
+    private static final String STARTUP_LOCK_KEY = "oneTimeStartupJobLock";
+    private static final String EXECUTION_FLAG_KEY = "startupJobExecuted";
+    private static final long LOCK_TTL = 1; // 1 hour TTL
+    private static final long FLAG_TTL = 48; // 48 hours TTL
+
+    /**
+     * This method runs every 5 minutes but executes only once after application startup
+     * by using a Redis execution flag and distributed lock.
+     */
+    @Scheduled(cron = "0 */5 * * * ?") // Runs every 5 minutes
+    public void runOnceAfterStartup() {
+        // Check if the job has already been executed by any instance
+        Boolean alreadyExecuted = redisTemplate.hasKey(EXECUTION_FLAG_KEY);
+        if (Boolean.TRUE.equals(alreadyExecuted)) {
+            System.out.println("Startup job has already been executed. Skipping execution.");
+            return;
+        }
+
+        // Attempt to acquire the Redis lock for the startup job
+        Boolean lockAcquired = Boolean.TRUE.equals(
+            redisTemplate.opsForValue().setIfAbsent(STARTUP_LOCK_KEY, "locked", LOCK_TTL, TimeUnit.HOURS)
+        );
+
+        if (!lockAcquired) {
+            System.out.println("Another instance has already acquired the lock. Skipping execution.");
+            return;
+        }
+
+        try {
+            System.out.println("Executing the one-time startup job.");
+            performStartupTask();
+
+            // Set the execution flag in Redis to prevent future runs until the application is restarted
+            redisTemplate.opsForValue().set(EXECUTION_FLAG_KEY, "executed", FLAG_TTL, TimeUnit.HOURS);
+            System.out.println("Startup job execution flag set in Redis.");
+        } catch (Exception e) {
+            System.err.println("Error during the execution of the startup job: " + e.getMessage());
+        } finally {
+            // Release the Redis lock
+            redisTemplate.delete(STARTUP_LOCK_KEY);
+            System.out.println("One-time startup job completed and lock released.");
+        }
+    }
+
+    private void performStartupTask() {
+        // Your business logic goes here
+        System.out.println("Performing one-time startup task...");
+    }
+}
