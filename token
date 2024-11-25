@@ -44,13 +44,16 @@ public class SprServiceHttpRequestProcessorTest {
         mockResponse.setExpiresInSeconds(3600);
         mockResponse.setScope("mockScope");
 
-        // Mock RestTemplate behavior
-        when(restTemplateMock.postForObject(anyString(), any(HttpEntity.class), eq(ApigeeTokenResponse.class)))
-                .thenReturn(mockResponse);
+        // Spy on the RestTemplate instance
+        RestTemplate restTemplateSpy = spy(new RestTemplate());
+        doReturn(mockResponse).when(restTemplateSpy).postForObject(anyString(), any(HttpEntity.class), eq(ApigeeTokenResponse.class));
 
-        // Mock getRestTemplate method
-        when(SprServiceHttpRequestProcessor.retrieveApigeeToken()).thenCallRealMethod();
-        
+        // Mock retrieveApigeeToken method to use the spy
+        doAnswer(invocation -> {
+            SprServiceHttpRequestProcessor restTemplate = (SprServiceHttpRequestProcessor) invocation.getMock();
+            return restTemplateSpy;
+        }).when(SprServiceHttpRequestProcessor.class, "retrieveApigeeToken");
+
         // Execute
         ApigeeTokenResponse tokenResponse = SprServiceHttpRequestProcessor.retrieveApigeeToken();
 
