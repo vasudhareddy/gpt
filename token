@@ -1,0 +1,116 @@
+import static org.mockito.Mockito.*;
+import static org.junit.Assert.*;
+import static org.powermock.api.mockito.PowerMockito.*;
+
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.powermock.core.classloader.annotations.PrepareForTest;
+import org.powermock.modules.junit4.PowerMockRunner;
+import org.springframework.http.*;
+import org.springframework.web.client.RestTemplate;
+
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.util.Base64;
+
+@RunWith(PowerMockRunner.class)
+@PrepareForTest({SprServiceHttpRequestProcessor.class, ServiceMart.class})
+public class SprServiceHttpRequestProcessorTest {
+
+    @Mock
+    private RestTemplate restTemplateMock;
+
+    @Before
+    public void setUp() {
+        mockStatic(SprServiceHttpRequestProcessor.class);
+        mockStatic(ServiceMart.class);
+    }
+
+    @Test
+    public void testRetrieveApigeeToken_Success() {
+        // Mock ServiceMart static method
+        when(ServiceMart.getServiceInfo("elps.xApiKey")).thenReturn("mockApiKey");
+        when(ServiceMart.getServiceInfo("elps.clientSecret")).thenReturn("mockClientSecret");
+        when(ServiceMart.getServiceInfo("elps.tokenAccessUrl")).thenReturn("http://mockurl/token");
+
+        // Prepare a mock response
+        ApigeeTokenResponse mockResponse = new ApigeeTokenResponse();
+        mockResponse.setAccessToken("mockAccessToken");
+        mockResponse.setExpiresInSeconds(3600);
+        mockResponse.setScope("mockScope");
+
+        // Mock RestTemplate behavior
+        when(restTemplateMock.postForObject(anyString(), any(HttpEntity.class), eq(ApigeeTokenResponse.class)))
+                .thenReturn(mockResponse);
+
+        // Mock getRestTemplate method
+        when(SprServiceHttpRequestProcessor.retrieveApigeeToken()).thenCallRealMethod();
+        
+        // Execute
+        ApigeeTokenResponse tokenResponse = SprServiceHttpRequestProcessor.retrieveApigeeToken();
+
+        // Assertions
+        assertNotNull(tokenResponse);
+        assertEquals("mockAccessToken", tokenResponse.getAccessToken());
+        assertEquals("mockScope", tokenResponse.getScope());
+    }
+
+    @Test(expected = ApigeeException.class)
+    public void testRetrieveApigeeToken_Failure() {
+        // Mock ServiceMart static method
+        when(ServiceMart.getServiceInfo("elps.xApiKey")).thenReturn("mockApiKey");
+        when(ServiceMart.getServiceInfo("elps.clientSecret")).thenReturn("mockClientSecret");
+        when(ServiceMart.getServiceInfo("elps.tokenAccessUrl")).thenReturn("http://mockurl/token");
+
+        // Mock RestTemplate behavior to return null
+        when(restTemplateMock.postForObject(anyString(), any(HttpEntity.class), eq(ApigeeTokenResponse.class)))
+                .thenReturn(null);
+
+        // Execute
+        SprServiceHttpRequestProcessor.retrieveApigeeToken();
+    }
+
+    @Test
+    public void testExecuteRestUsingBearerToken_Success() throws URISyntaxException, SprServiceException {
+        // Prepare mocks
+        ApigeeTokenResponse mockTokenResponse = new ApigeeTokenResponse();
+        mockTokenResponse.setAccessToken("mockAccessToken");
+
+        when(SprServiceHttpRequestProcessor.retrieveApigeeToken()).thenReturn(mockTokenResponse);
+
+        ResponseEntity<String> mockResponseEntity = new ResponseEntity<>("Success", HttpStatus.OK);
+        when(restTemplateMock.exchange(any(URI.class), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(mockResponseEntity);
+
+        // Mock getRestTemplate
+        when(SprServiceHttpRequestProcessor.executeRestUsingBearerToken(anyString(), anyString())).thenCallRealMethod();
+
+        // Execute
+        String response = SprServiceHttpRequestProcessor.executeRestUsingBearerToken("http://mockurl/service", "<request>");
+
+        // Assertions
+        assertNotNull(response);
+        assertEquals("Success", response);
+    }
+
+    @Test(expected = SprServiceException.class)
+    public void testExecuteRestUsingBearerToken_RuntimeException() throws URISyntaxException {
+        // Mock retrieveApigeeToken
+        ApigeeTokenResponse mockTokenResponse = new ApigeeTokenResponse();
+        mockTokenResponse.setAccessToken("mockAccessToken");
+
+        when(SprServiceHttpRequestProcessor.retrieveApigeeToken()).thenReturn(mockTokenResponse);
+
+        // Mock RestTemplate to throw RuntimeException
+        when(restTemplateMock.exchange(any(URI.class), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenThrow(new RuntimeException("Runtime Exception"));
+
+        // Execute
+        SprServiceHttpRequestProcessor.executeRestUsingBearerToken("http://mockurl/service", "<request>");
+    }
+}
