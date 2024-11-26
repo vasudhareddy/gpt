@@ -1,0 +1,47 @@
+@Test
+public void testRetrieveApigeeToken_Success() {
+    // Mock static methods in ServiceMart
+    try (MockedStatic<ServiceMart> mockedServiceMart = mockStatic(ServiceMart.class)) {
+        mockedServiceMart.when(() -> ServiceMart.getServiceInfo("elps.xApiKey"))
+                .thenReturn("mockApiKey");
+        mockedServiceMart.when(() -> ServiceMart.getServiceInfo("elps.clientSecret"))
+                .thenReturn("mockClientSecret");
+        mockedServiceMart.when(() -> ServiceMart.getServiceInfo("elps.tokenAccessUrl"))
+                .thenReturn("http://mockurl/token");
+
+        // Mock expected behavior
+        ApigeeTokenResponse mockResponse = new ApigeeTokenResponse();
+        mockResponse.setAccessToken("mockAccessToken");
+        mockResponse.setExpiresInSeconds(3600);
+        mockResponse.setScope("mockScope");
+
+        // Use a spy on RestTemplate
+        RestTemplate restTemplateSpy = spy(new RestTemplate());
+
+        // Mock postForObject on the spy
+        doAnswer(invocation -> {
+            String url = invocation.getArgument(0);
+            HttpEntity<?> entity = invocation.getArgument(1);
+            Class<?> responseType = invocation.getArgument(2);
+
+            // Validate URL and entity if needed
+            assertEquals("http://mockurl/token", url);
+            assertNotNull(entity.getHeaders().get("Authorization"));
+            assertEquals(ApigeeTokenResponse.class, responseType);
+
+            return mockResponse; // Return mock response
+        }).when(restTemplateSpy).postForObject(anyString(), any(HttpEntity.class), any(Class.class));
+
+        // Inject the spy into the processor
+        SprServiceHttpRequestProcessor processor = new SprServiceHttpRequestProcessor();
+        processor.setRestTemplate(restTemplateSpy);
+
+        // Execute
+        ApigeeTokenResponse tokenResponse = processor.retrieveApigeeToken();
+
+        // Assertions
+        assertNotNull(tokenResponse);
+        assertEquals("mockAccessToken", tokenResponse.getAccessToken());
+        assertEquals("mockScope", tokenResponse.getScope());
+    }
+}
