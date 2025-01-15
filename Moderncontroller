@@ -1,0 +1,82 @@
+@RestController
+@RequestMapping("/loan")
+public class LoanSearchController {
+
+    private final OpsService opsService;
+    private final MessageSource messageSource;
+
+    // Constructor injection for dependencies
+    public LoanSearchController(OpsService opsService, MessageSource messageSource) {
+        this.opsService = opsService;
+        this.messageSource = messageSource;
+    }
+
+    @PostMapping("/loanSearch")
+    public ResponseEntity<LoanSearchResultDto> searchByLoan(
+            @Valid @RequestBody LoanSearchFormDto loanSearchFormDto) {
+        // Start timer
+        StopWatch stopWatch = new StopWatch();
+        stopWatch.start();
+
+        try {
+            // Prepare search parameters
+            LoanSearchResultDto loanSearchResultDto;
+            if (loanSearchFormDto.isSearchTypeByLastNameSSN()) {
+                String[] search = {
+                    loanSearchFormDto.getFirstName().toUpperCase(),
+                    loanSearchFormDto.getLastName().toUpperCase(),
+                    loanSearchFormDto.getSsn()
+                };
+                loanSearchResultDto = opsService.loanSearchViaLastNameSSN(search, 0);
+            } else {
+                loanSearchResultDto = performLoanNumberSearch(loanSearchFormDto);
+            }
+
+            logInfo(true, "LoanSearch", loanSearchFormDto.getClientNumber(),
+                    loanSearchFormDto.getLoanNumber(), "", "", stopWatch);
+
+            return ResponseEntity.ok(loanSearchResultDto);
+
+        } catch (Exception ex) {
+            logError("Error occurred during loan search", ex);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error occurred during loan search", ex);
+        }
+    }
+
+    private LoanSearchResultDto performLoanNumberSearch(LoanSearchFormDto loanSearchFormDto) {
+        LoanSearchResultDto loanSearchResultDto = opsService.loanSearchViaLoanNumber(loanSearchFormDto.getLoanNumber(), 0);
+        LoanSearchResultDto filteredResults = new LoanSearchResultDto();
+        
+        for (Object result : loanSearchResultDto.getResults()) {
+            LoanSearchItem resultItem = (LoanSearchItem) result;
+            String postalCode = resultItem.getPropertyZipCode();
+
+            if (resultItem.getLoanNumber().equals(loanSearchFormDto.getLoanNumber())) {
+                if (loanSearchFormDto.isPostalCodeRequired()) {
+                    if (postalCode.equals(loanSearchFormDto.getPostalCode())) {
+                        filteredResults.addResultItem(resultItem);
+                    }
+                } else {
+                    filteredResults.addResultItem(resultItem);
+                }
+            }
+        }
+
+        if (!loanSearchFormDto.isPostalCodeRequired() && filteredResults.getResultCount() > 1) {
+            loanSearchFormDto.setPostalCodeRequired(true);
+            return filteredResults;
+        }
+
+        return loanSearchResultDto;
+    }
+
+    private void logInfo(boolean status, String taskName, String clientNumber, String loanNumber, 
+                         String ecn, String secn, StopWatch stopWatch) {
+        // Modern logging with placeholders
+        System.out.printf("Status: %b, Task: %s, Client: %s, Loan: %s, Time: %s%n",
+                status, taskName, clientNumber, loanNumber, stopWatch.getTime());
+    }
+
+    private void logError(String message, Exception ex) {
+        // Modern logging for errors
+        System.err.printf("Error: %s, Exce
