@@ -1,1 +1,0 @@
-"Currently not available. We can enable Actuator to expose a Redis health check endpoint with minimal changes to the `pom.xml` and property files. For more advanced or customized health checks, a custom Health Indicator can be implemented, which would require additional code changes."
