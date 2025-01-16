@@ -1,0 +1,43 @@
+import java.util.Properties;
+import java.time.ZoneId;
+
+public class con {
+
+    public static final ZoneId DEFAULT_TIMEZONE_ID = ZoneId.of("America/Chicago");
+
+    private final Properties configuration;
+
+    public Configuration(Properties configuration) {
+        if (configuration == null) {
+            throw new IllegalArgumentException("Configuration properties cannot be null.");
+        }
+        this.configuration = configuration;
+    }
+
+    public Properties getConfiguration() {
+        return new Properties(configuration); // Return a copy for immutability
+    }
+
+    public String getProperty(String key) {
+        validateKey(key);
+
+        String value = configuration.getProperty(key);
+        if (value == null) {
+            throw new ConfigurationException("Value not found for key: " + key);
+        }
+
+        return value;
+    }
+
+    public String getProperty(String key, String defaultValue) {
+        validateKey(key);
+
+        return configuration.getProperty(key, defaultValue);
+    }
+
+    private void validateKey(String key) {
+        if (key == null || key.isBlank()) {
+            throw new IllegalArgumentException("Key required for property access.");
+        }
+    }
+}
