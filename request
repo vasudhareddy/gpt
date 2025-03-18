@@ -1,0 +1,14 @@
+✅ So what happens to request.getSession() in this setup?
+In a JWT-based authentication flow, you typically don’t need to rely on request.getSession() at all.
+
+Here’s why:
+The JWT token holds all the necessary authentication data (user ID, roles, etc.).
+The backend validates the token on each request, so there's no need to store session state server-side.
+Since nothing is stored in a backend session, it doesn't matter how many instances you have or which one handles the request.
+
+What happens if you still use request.getSession()?
+It will create a session on the backend (in memory or Redis if configured).
+But it's not needed unless you're storing some temporary, user-specific data server-side.
+If you do use it, remember it’ll only work reliably if you're using:
+Sticky sessions, or
+Shared session storage like Redis.
